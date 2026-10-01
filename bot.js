@@ -153,6 +153,7 @@ function createBot({ onStateChange } = {}) {
 
     if (connection === 'close') {
       const dead = sock;
+      if (dead && dead.__teardown) return; // intentional freshSocket() teardown, ignore
       sock = null;
       detachMessages(dead);
 
@@ -215,16 +216,41 @@ function createBot({ onStateChange } = {}) {
     return s;
   }
 
+  /**
+   * Throw away the current socket + credentials and start pristine.
+   * Used before issuing a pairing code: a stale session is the most common
+   * reason a code is rejected by the phone.
+   */
+  async function freshSocket() {
+    const old = sock;
+    sock = null;
+    if (old) {
+      old.__teardown = true;
+      try {
+        old.end();
+      } catch {
+        /* ignore */
+      }
+    }
+    wipeAuthDir();
+    return ensureSocket();
+  }
+
   /** Ask WhatsApp for an 8-character pairing code for this phone number. */
   async function requestPair(phone) {
     const digits = String(phone || '').replace(/\D/g, '');
     if (!/^\d{7,15}$/.test(digits)) {
       throw new Error('Enter your phone number with country code, e.g. 94763398318');
     }
-    const s = await ensureSocket();
-    if (s.authState.creds.registered) {
-      throw new Error('This device is already linked to WhatsApp');
+    {
+      const cur = await ensureSocket();
+      if (cur.authState.creds.registered) {
+        throw new Error('This device is already linked to WhatsApp');
+      }
     }
+    // always issue the code on pristine credentials
+    const s = await freshSocket();
+    console.log('[pair] requesting pairing code for +' + digits);
     // the pairing IQ fails if the websocket handshake isn't done yet — wait for it
     await withTimeout(s.waitForSocketOpen(), 20000, 'Could not reach WhatsApp. Check your internet and try again.');
     const code = await s.requestPairingCode(digits);
