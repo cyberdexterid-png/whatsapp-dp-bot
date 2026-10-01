@@ -65,10 +65,15 @@ async function showQr(qr) {
 /** Convert any image to a full-size, no-crop DP and set it as my profile photo. */
 async function setMyDp(sock, imageBuffer) {
   const dp = await makeFullSizeDp(imageBuffer, DP_SIZE);
-  await sock.updateProfilePicture(sock.user.id, { img: dp });
+  // v7 takes the image buffer directly (not { img: buffer } like v6)
+  await sock.updateProfilePicture(sock.user.id, dp);
 }
 
-/** Connect (or reconnect) to WhatsApp as a linked device. Resolves with the socket. */
+/**
+ * Connect (or reconnect) to WhatsApp as a linked device.
+ * Resolves with { sock, closed } — `closed` is a promise that resolves
+ * with { loggedOut } when this connection drops.
+ */
 function connect() {
   return new Promise(async (resolve, reject) => {
     const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
@@ -85,6 +90,11 @@ function connect() {
     sock.ev.on('creds.update', saveCreds);
 
     let done = false;
+    let notifyClosed;
+    const closed = new Promise((r) => {
+      notifyClosed = r;
+    });
+
     sock.ev.on('connection.update', async (update) => {
       const { connection, lastDisconnect, qr } = update;
 
@@ -93,7 +103,7 @@ function connect() {
       if (connection === 'open' && !done) {
         done = true;
         console.log('Linked as', sock.user.id);
-        resolve(sock);
+        resolve({ sock, closed });
       }
 
       if (connection === 'close') {
@@ -110,7 +120,7 @@ function connect() {
           );
         } else {
           // tell the running bot the connection dropped
-          sock.ev.emit('dpbot.closed', { loggedOut });
+          notifyClosed({ loggedOut });
         }
       }
     });
@@ -118,7 +128,7 @@ function connect() {
 }
 
 /** Bot mode: watch for photos YOU send, auto-set each one as your DP. */
-async function runBot(sock) {
+async function runBot(sock, closed) {
   console.log('Bot running.');
   console.log('Send any photo to your "Message yourself" chat and it becomes your DP automatically.\n');
 
@@ -157,9 +167,7 @@ async function runBot(sock) {
   sock.ev.on('messages.upsert', onMessage);
 
   // wait until the connection drops, then clean up and return
-  const { loggedOut } = await new Promise((resolve) => {
-    sock.ev.once('dpbot.closed', resolve);
-  });
+  const { loggedOut } = await closed;
   sock.ev.off('messages.upsert', onMessage);
   return { loggedOut };
 }
@@ -180,7 +188,7 @@ async function main() {
       console.error('Give an image file:  node index.js --set ./myphoto.jpg');
       process.exit(1);
     }
-    const sock = await connect();
+    const { sock } = await connect();
     console.log('Setting your DP…');
     await setMyDp(sock, fs.readFileSync(file));
     console.log('Done! Your profile photo is updated — full image, nothing cropped.');
@@ -190,8 +198,8 @@ async function main() {
   // --- bot mode (default): stay linked, auto-set every photo you send ---
   for (;;) {
     try {
-      const sock = await connect();
-      const { loggedOut } = await runBot(sock);
+      const { sock, closed } = await connect();
+      const { loggedOut } = await runBot(sock, closed);
       if (loggedOut) {
         console.log('Logged out. Delete the "auth" folder and run again to re-link.');
         process.exit(1);
