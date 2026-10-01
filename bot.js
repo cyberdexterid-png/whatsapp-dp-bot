@@ -253,6 +253,18 @@ function createBot({ onStateChange } = {}) {
     console.log('[pair] requesting pairing code for +' + digits);
     // the pairing IQ fails if the websocket handshake isn't done yet — wait for it
     await withTimeout(s.waitForSocketOpen(), 20000, 'Could not reach WhatsApp. Check your internet and try again.');
+    // a code for a number that isn't on WhatsApp can never be accepted — catch typos first
+    try {
+      const [lookup] = await s.onWhatsApp(digits);
+      if (!lookup || !lookup.exists) {
+        throw new Error(
+          'That number is not on WhatsApp. Use international format: country code + number, no spaces, no leading 0 — e.g. 94763398318'
+        );
+      }
+    } catch (err) {
+      if (/not on WhatsApp/.test(err.message)) throw err;
+      console.warn('[pair] number lookup failed, continuing anyway:', err.message);
+    }
     const code = await s.requestPairingCode(digits);
     pairingCode = code;
     pairingPhone = digits;
