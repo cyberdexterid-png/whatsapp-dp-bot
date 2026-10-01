@@ -1,0 +1,1 @@
+{"customizations":{"vscode":{"extensions":[]}},"image":"mcr.microsoft.com/devcontainers/javascript-node:1-20","name":"WhatsApp DP Bot","postCreateCommand":"npm install"}
