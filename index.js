@@ -1,216 +1,63 @@
 /*
- * WhatsApp DP Bot — auto-changes YOUR profile photo. No cropping, no manual steps.
+ * index.js — terminal mode for the WhatsApp DP Bot.
  *
- * USE:
- *   npm start                  Link your WhatsApp (QR code) and run the bot.
- *                              Then send ANY photo to your "Message yourself"
- *                              chat — the bot sets it as your DP automatically.
+ *   node index.js            Run the bot in this terminal (auto-sets every photo
+ *                            you send to your "Message yourself" chat).
+ *   node index.js --set <f>  Set your DP once from an image file, then exit.
  *
- *   node index.js --set <img>  Set your DP directly from an image file.
- *
- * LINKING (first run):
- *   A QR code prints in this terminal. On your phone open WhatsApp >
- *   menu (⋮) > Linked devices > Link a device, and scan it.
- *
- * NOTE: this uses an unofficial WhatsApp library. WhatsApp may temporarily
- * restrict numbers that use unofficial clients. Use at your own risk.
+ * First-time linking is done through the website (npm start) with a WhatsApp
+ * pairing code — no QR. The login is saved in auth/, so this works after that.
  */
 
-const path = require('path');
 const fs = require('fs');
-const qrcode = require('qrcode-terminal');
-const QRCode = require('qrcode');
-const pino = require('pino');
-const { HttpsProxyAgent } = require('https-proxy-agent');
+const { createBot, State } = require('./bot');
 
-const {
-  default: makeWASocket,
-  useMultiFileAuthState,
-  DisconnectReason,
-  downloadMediaMessage,
-} = require('@whiskeysockets/baileys');
-
-const { makeFullSizeDp } = require('./dp');
-
-const AUTH_DIR = path.join(__dirname, 'auth'); // login session is saved here
-const DP_SIZE = 640; // WhatsApp profile photo size
-
-/**
- * This computer reaches the internet through a proxy — route WhatsApp's
- * connection through it too, otherwise the TLS handshake fails.
- */
-function getProxyAgent() {
-  const proxy = process.env.HTTPS_PROXY || process.env.https_proxy;
-  if (!proxy) return undefined;
-  try {
-    return new HttpsProxyAgent(proxy);
-  } catch {
-    return undefined;
-  }
-}
-
-async function showQr(qr) {
-  console.log('\nScan this QR with WhatsApp:');
-  console.log('  WhatsApp > menu (top-right ⋮) > Linked devices > Link a device\n');
-  qrcode.generate(qr, { small: true });
-  // also save a scannable image (qr.png) — refreshed every time the code renews
-  try {
-    await QRCode.toFile(path.join(__dirname, 'qr.png'), qr, { width: 440, margin: 2 });
-    console.log('QR image saved to qr.png');
-  } catch (e) {
-    console.error('Could not save QR image:', e.message);
-  }
-}
-
-/** Convert any image to a full-size, no-crop DP and set it as my profile photo. */
-async function setMyDp(sock, imageBuffer) {
-  const dp = await makeFullSizeDp(imageBuffer, DP_SIZE);
-  // v7 takes the image buffer directly (not { img: buffer } like v6)
-  await sock.updateProfilePicture(sock.user.id, dp);
-}
-
-/**
- * Connect (or reconnect) to WhatsApp as a linked device.
- * Resolves with { sock, closed } — `closed` is a promise that resolves
- * with { loggedOut } when this connection drops.
- */
-function connect() {
-  return new Promise(async (resolve, reject) => {
-    const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
-
-    const proxyAgent = getProxyAgent();
-    const sock = makeWASocket({
-      auth: state,
-      logger: pino({ level: 'silent' }), // keep the terminal clean
-      browser: ['DP Bot', 'Chrome', '120.0'],
-      agent: proxyAgent, // websocket via proxy
-      fetchAgent: proxyAgent, // media up/download via proxy
-    });
-
-    sock.ev.on('creds.update', saveCreds);
-
-    let done = false;
-    let notifyClosed;
-    const closed = new Promise((r) => {
-      notifyClosed = r;
-    });
-
-    sock.ev.on('connection.update', async (update) => {
-      const { connection, lastDisconnect, qr } = update;
-
-      if (qr && !done) await showQr(qr);
-
-      if (connection === 'open' && !done) {
-        done = true;
-        console.log('Linked as', sock.user.id);
-        resolve({ sock, closed });
-      }
-
-      if (connection === 'close') {
-        const code = lastDisconnect?.error?.output?.statusCode;
-        const loggedOut = code === DisconnectReason.loggedOut;
-        if (!done) {
-          done = true;
-          reject(
-            new Error(
-              loggedOut
-                ? 'Logged out of WhatsApp. Delete the "auth" folder and scan the QR again.'
-                : 'Could not connect to WhatsApp. Check your internet and try again.'
-            )
-          );
-        } else {
-          // tell the running bot the connection dropped
-          notifyClosed({ loggedOut });
-        }
-      }
-    });
-  });
-}
-
-/** Bot mode: watch for photos YOU send, auto-set each one as your DP. */
-async function runBot(sock, closed) {
-  console.log('Bot running.');
-  console.log('Send any photo to your "Message yourself" chat and it becomes your DP automatically.\n');
-
-  const onMessage = async ({ messages, type }) => {
-    if (type !== 'notify') return;
-
-    for (const m of messages) {
-      try {
-        if (!m.message || !m.message.imageMessage) continue;
-        if (!m.key.fromMe) continue; // only photos you send yourself
-
-        const chat = m.key.remoteJid;
-        await sock.sendMessage(chat, { text: 'Making your full-size DP…' }, { quoted: m });
-
-        const imgBuffer = await downloadMediaMessage(m, 'buffer', {});
-        await setMyDp(sock, imgBuffer);
-
-        await sock.sendMessage(
-          chat,
-          { text: 'Done! Your profile photo is updated — full image, nothing cropped.' },
-          { quoted: m }
-        );
-      } catch (err) {
-        console.error('Could not update DP:', err.message);
-        try {
-          await sock.sendMessage(m.key.remoteJid, {
-            text: 'Could not update your DP: ' + err.message,
-          });
-        } catch (_) {
-          /* ignore */
-        }
-      }
+async function waitForLink(bot, timeoutMs = 120000) {
+  const start = Date.now();
+  for (;;) {
+    if (bot.getStatus().state === State.LINKED) return;
+    if (Date.now() - start > timeoutMs) {
+      throw new Error(
+        'Not linked yet. Run "npm start", open the website and link with a pairing code first.'
+      );
     }
-  };
-
-  sock.ev.on('messages.upsert', onMessage);
-
-  // wait until the connection drops, then clean up and return
-  const { loggedOut } = await closed;
-  sock.ev.off('messages.upsert', onMessage);
-  return { loggedOut };
+    await new Promise((r) => setTimeout(r, 1000));
+  }
 }
 
 async function main() {
   const args = process.argv.slice(2);
 
   if (args[0] === '--help' || args[0] === '-h') {
-    console.log('\n  npm start                  Run the bot (send it a photo to auto-set your DP)');
-    console.log('  node index.js --set <img>  Set your DP directly from an image file\n');
+    console.log('\n  npm start                Run the website (pair with a code, upload photos)');
+    console.log('  node index.js            Terminal bot mode (auto-DP from your self-chat)');
+    console.log('  node index.js --set <f>  Set your DP once from an image file\n');
     return;
   }
 
-  // --- one-shot mode: set DP from a file, then exit ---
+  const bot = createBot({
+    onStateChange: (s) => console.log('[bot]', s.state, s.user || ''),
+  });
+  bot.start();
+
   if (args[0] === '--set') {
     const file = args[1];
     if (!file || !fs.existsSync(file)) {
       console.error('Give an image file:  node index.js --set ./myphoto.jpg');
       process.exit(1);
     }
-    const { sock } = await connect();
+    await waitForLink(bot);
     console.log('Setting your DP…');
-    await setMyDp(sock, fs.readFileSync(file));
+    await bot.setDp(fs.readFileSync(file));
     console.log('Done! Your profile photo is updated — full image, nothing cropped.');
     process.exit(0);
   }
 
-  // --- bot mode (default): stay linked, auto-set every photo you send ---
-  for (;;) {
-    try {
-      const { sock, closed } = await connect();
-      const { loggedOut } = await runBot(sock, closed);
-      if (loggedOut) {
-        console.log('Logged out. Delete the "auth" folder and run again to re-link.');
-        process.exit(1);
-      }
-      console.log('Connection lost. Reconnecting…');
-    } catch (err) {
-      console.error(err.message);
-      console.log('Retrying in 5 seconds… (Ctrl+C to stop)');
-      await new Promise((r) => setTimeout(r, 5000));
-    }
-  }
+  console.log('Terminal bot running. Send any photo to your "Message yourself" chat.');
+  console.log('(Ctrl+C to stop)\n');
+  await waitForLink(bot, 10 * 60 * 1000);
+  // stay alive; the bot core handles messages and reconnects
+  await new Promise(() => {});
 }
 
 main().catch((err) => {

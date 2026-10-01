@@ -1,63 +1,51 @@
-# WhatsApp DP Bot 🤖
+# WhatsApp DP Bot 📸
 
-Automatically sets **your** WhatsApp profile photo from any image — full size, **nothing cropped**, no manual steps.
+Set **your** WhatsApp profile photo from any image — full size, **nothing cropped** —
+through a simple website. No QR codes: you link with a WhatsApp **pairing code**.
 
-## What you need
+## Run it (website)
 
-- Your phone with WhatsApp
-- A computer with **Node.js 18 or newer** → https://nodejs.org
-  — **or** run it free in your browser with GitHub Codespaces (no install needed,
-  see below)
+You need **Node.js 18+**. Either:
 
-## Option A — run in your browser (GitHub Codespaces, easiest)
+**A. In your browser — GitHub Codespaces (easiest, nothing to install)**
+1. On this repo's page: green **Code** button → **Codespaces** → **Create codespace on main**.
+2. In the terminal at the bottom: `npm start`
+3. Open the forwarded website URL (Codespaces shows a popup / see the Ports tab).
 
-1. On this repo's page, click the green **Code** button → **Codespaces** tab →
-   **Create codespace on main**. (Dependencies install automatically.)
-2. In the terminal at the bottom, run:
-
-   ```bash
-   npm start
-   ```
-
-3. A **QR code** appears in the terminal (a `qr.png` image is also saved —
-   click it in the file explorer on the left to view it big). On your phone:
-   **WhatsApp → menu (⋮ top-right) → Linked devices → Link a device** → scan it.
-4. Leave the Codespace running while you want the bot active.
-
-## Option B — run on your own computer
-
-1. Download this folder and unzip it (or `git clone` it).
-2. Open a terminal **inside the folder** and run:
-
-   ```bash
-   npm install
-   ```
-
-3. Start the bot:
-
-   ```bash
-   npm start
-   ```
-
-4. A **QR code** appears in the terminal. On your phone:
-   **WhatsApp → menu (⋮ top-right) → Linked devices → Link a device** → scan the QR.
+**B. On your own computer**
+```bash
+npm install
+npm start
+```
+Then open http://localhost:3000
 
 ## Use it
 
-Just send **any photo** to your own **"Message yourself"** chat on WhatsApp.
-The bot converts it (whole photo visible, blurred background fill) and sets it
-as your profile photo **automatically**. ✅
+1. **Link WhatsApp** — on the site, enter your number (with country code, e.g.
+   `94763398318`) and tap *Get pairing code*. On your phone:
+   **WhatsApp → ⋮ → Linked devices → Link a device → “Link with phone number instead”**,
+   then type the 8-character code.
+2. **Set your DP** — choose any photo on the site. You'll see an exact preview of
+   the DP (whole photo visible, blurred background fills the rest), then tap
+   *Set as my WhatsApp DP*.
 
-## Set a DP directly from a file
+Bonus: any photo you send to your own **“Message yourself”** chat also becomes
+your DP automatically while the site is running.
+
+## Terminal mode (optional)
 
 ```bash
-node index.js --set ./myphoto.jpg
+node index.js            # bot mode in this terminal
+node index.js --set <f>  # set DP once from an image file
 ```
+First-time linking is done via the website; the login is saved in `auth/`.
 
 ## Notes
 
-- Your photo is processed **on your own computer** — nothing is uploaded to any server.
+- Your photo is processed **on the machine running the site** — nothing is
+  uploaded to any server except WhatsApp itself.
 - The login session is saved in the `auth/` folder. To unlink, delete that folder
-  (or remove the device in WhatsApp → Linked devices) and scan again.
-- ⚠️ This uses an unofficial WhatsApp library. WhatsApp may temporarily restrict
-  numbers that use unofficial clients. Use at your own risk.
+  (or remove the device in WhatsApp → Linked devices) and pair again.
+- ⚠️ This uses an unofficial WhatsApp library. WhatsApp sometimes logs out such
+  linked devices on its own — occasionally right after a photo change. If that
+  happens, just pair again with a fresh code (≈20 seconds). Use at your own risk.
