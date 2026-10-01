@@ -39,8 +39,8 @@ app.get('/api/status', (req, res) => {
 
 app.post('/api/pair', async (req, res) => {
   try {
-    const code = await bot.requestPair(req.body && req.body.phone);
-    res.json({ code });
+    const { code, phone } = await bot.requestPair(req.body && req.body.phone);
+    res.json({ code, phone });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }

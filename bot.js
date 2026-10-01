@@ -38,6 +38,14 @@ const State = {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+function withTimeout(promise, ms, message) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message || 'Timed out')), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 /**
  * This computer may reach the internet through a proxy — route WhatsApp's
  * connection through it too, otherwise the TLS handshake fails.
@@ -63,6 +71,7 @@ function createBot({ onStateChange } = {}) {
   let sock = null;
   let state = State.NEEDS_PAIRING;
   let pairingCode = null;
+  let pairingPhone = null; // number the current code was issued for
   let user = null;
   let registered = false; // true once this session has ever linked successfully
   let wasLoggedOut = false;
@@ -70,7 +79,7 @@ function createBot({ onStateChange } = {}) {
   let onMessage = null;
 
   function getStatus() {
-    return { state, pairingCode, user, wasLoggedOut };
+    return { state, pairingCode, pairingPhone, user, wasLoggedOut };
   }
 
   function setState(s) {
@@ -158,11 +167,21 @@ function createBot({ onStateChange } = {}) {
         }
         wipeAuthDir();
         registered = false;
+        const midPairing = state === State.PAIRING ? pairingPhone : null;
         pairingCode = null;
+        pairingPhone = null;
         user = null;
         wasLoggedOut = true;
         setState(State.LOGGED_OUT);
         await ensureSocket(); // fresh unregistered socket, ready to re-pair
+        // if the logout killed a pairing in progress, issue a fresh code automatically
+        if (midPairing) {
+          try {
+            await requestPair(midPairing);
+          } catch {
+            /* user can tap "get a new code" on the site */
+          }
+        }
         return;
       }
 
@@ -202,15 +221,18 @@ function createBot({ onStateChange } = {}) {
     if (!/^\d{7,15}$/.test(digits)) {
       throw new Error('Enter your phone number with country code, e.g. 94763398318');
     }
-    if (registered && state === State.LINKED) {
-      throw new Error('Already linked to WhatsApp');
-    }
     const s = await ensureSocket();
+    if (s.authState.creds.registered) {
+      throw new Error('This device is already linked to WhatsApp');
+    }
+    // the pairing IQ fails if the websocket handshake isn't done yet — wait for it
+    await withTimeout(s.waitForSocketOpen(), 20000, 'Could not reach WhatsApp. Check your internet and try again.');
     const code = await s.requestPairingCode(digits);
     pairingCode = code;
+    pairingPhone = digits;
     wasLoggedOut = false;
     setState(State.PAIRING);
-    return code;
+    return { code, phone: digits };
   }
 
   /** Set your profile photo from any image buffer (full size, no cropping). */

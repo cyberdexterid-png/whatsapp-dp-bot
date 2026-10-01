@@ -56,6 +56,7 @@
       <button id="pairBtn" onclick="getCode()">Get pairing code</button>
     </div>
     <div id="codeBlock" class="hidden">
+      <p style="text-align:center;margin:4px 0 0">Code for <b id="codePhone" style="color:var(--text)"></b> — enter it within a minute, codes expire fast.</p>
       <div class="code" id="code"></div>
       <ol class="steps">
         <li>On your phone open <b>WhatsApp</b></li>
@@ -63,7 +64,8 @@
         <li>Tap <b>“Link with phone number instead”</b></li>
         <li>Type the <b>8-character code</b> above</li>
       </ol>
-      <p><button onclick="resetPair()" style="background:#3b4a54;color:var(--text)">Use a different number</button></p>
+      <p><button id="newCodeBtn" onclick="getCode(true)" style="background:#3b4a54;color:var(--text)">Get a new code</button></p>
+      <p><button onclick="resetPair()" style="background:transparent;color:var(--muted);font-weight:400">Use a different number</button></p>
     </div>
     <div class="msg" id="pairMsg"></div>
   </div>
@@ -107,7 +109,7 @@ async function refresh() {
     } else if (s.state === 'pairing') {
       pill.textContent = '● waiting for code entry';
       pill.className = 'pill waiting';
-      showCode(s.pairingCode);
+      showCode(s.pairingCode, s.pairingPhone);
     } else if (s.state === 'logged-out') {
       pill.textContent = '● logged out by WhatsApp';
       pill.className = 'pill bad';
@@ -123,11 +125,12 @@ async function refresh() {
   } catch { /* server warming up */ }
 }
 
-function showCode(code) {
+function showCode(code, phone) {
   if (!code) return;
   $('phoneRow').classList.add('hidden');
   $('codeBlock').classList.remove('hidden');
   $('code').textContent = code;
+  if (phone) $('codePhone').textContent = '+' + phone;
 }
 function resetPair() {
   $('phoneRow').classList.remove('hidden');
@@ -136,17 +139,18 @@ function resetPair() {
   $('pairMsg').className = 'msg';
 }
 
-async function getCode() {
-  const btn = $('pairBtn'), msg = $('pairMsg');
+async function getCode(isRetry) {
+  const btn = isRetry ? $('newCodeBtn') : $('pairBtn'), msg = $('pairMsg');
+  const phone = isRetry ? $('codePhone').textContent.replace(/\D/g, '') : $('phone').value;
   btn.disabled = true; msg.textContent = 'Asking WhatsApp for a code…'; msg.className = 'msg';
   try {
     const r = await fetch('/api/pair', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone: $('phone').value }),
+      body: JSON.stringify({ phone }),
     });
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || 'Failed');
-    showCode(j.code);
+    showCode(j.code, j.phone);
     msg.textContent = '';
   } catch (e) {
     msg.textContent = e.message; msg.className = 'msg err';
