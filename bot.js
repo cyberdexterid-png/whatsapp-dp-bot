@@ -303,12 +303,18 @@ function createBot({ onStateChange } = {}) {
     return { code, phone: digits };
   }
 
-  /** Set your profile photo from any image buffer (full size, no cropping). */
-  async function setDp(imageBuffer) {
+  /**
+   * Set your profile photo from any image buffer.
+   * mode 'original': upload the file untouched — WhatsApp crops it to a
+   *   square itself (usually the center).
+   * mode 'full' (default): the whole image stays visible, no cropping
+   *   (fitted on a blurred background).
+   */
+  async function setDp(imageBuffer, mode) {
     if (state !== State.LINKED || !sock) {
       throw new Error('WhatsApp is not linked yet — pair first');
     }
-    const dp = await makeFullSizeDp(imageBuffer, DP_SIZE);
+    const dp = mode === 'original' ? imageBuffer : await makeFullSizeDp(imageBuffer, DP_SIZE);
     // v7 takes the image buffer directly
     await sock.updateProfilePicture(sock.user.id, dp);
   }

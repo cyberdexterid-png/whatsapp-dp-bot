@@ -76,13 +76,19 @@ function takeImage(req, res) {
   return f.buffer;
 }
 
-// Exact preview of what your DP will look like (full image, no cropping)
+// Preview of what your DP will look like.
+// mode=full (default): the exact 640x640 output (whole image, no cropping).
+// mode=original: your untouched photo (WhatsApp will square-crop it itself).
 app.post('/api/preview', upload.single('image'), async (req, res) => {
   const buf = takeImage(req, res);
   if (!buf) return;
   try {
-    const dp = await makeFullSizeDp(buf, DP_SIZE);
-    res.type('image/jpeg').send(dp);
+    if (req.body && req.body.mode === 'original') {
+      res.type(req.file.mimetype || 'image/jpeg').send(buf);
+    } else {
+      const dp = await makeFullSizeDp(buf, DP_SIZE);
+      res.type('image/jpeg').send(dp);
+    }
   } catch (err) {
     res.status(400).json({ error: 'Could not read that image: ' + err.message });
   }
@@ -93,7 +99,7 @@ app.post('/api/dp', upload.single('image'), async (req, res) => {
   const buf = takeImage(req, res);
   if (!buf) return;
   try {
-    await bot.setDp(buf);
+    await bot.setDp(buf, req.body && req.body.mode === 'original' ? 'original' : 'full');
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
