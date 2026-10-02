@@ -4,6 +4,8 @@
  *
  *   npm run build
  *
+ * Uses the javascript-obfuscator CLI via npx (pinned version, fetched at
+ * build time — not a project dependency, so package-lock.json stays clean).
  * Reads server.js, bot.js, dp.js, index.js -> writes obfuscated copies to
  * dist/ (same relative layout, so require('./bot') etc. keep working).
  * Also copies public/, assets/, package.json, README.md into dist/.
@@ -15,13 +17,14 @@
  */
 const fs = require('fs');
 const path = require('path');
-const JavaScriptObfuscator = require('javascript-obfuscator');
+const { execFileSync } = require('child_process');
 
 const ROOT = path.join(__dirname, '..');
 const DIST = path.join(ROOT, 'dist');
 const FILES = ['server.js', 'bot.js', 'dp.js', 'index.js'];
 const COPY_DIRS = ['public', 'assets'];
 const COPY_FILES = ['package.json', 'README.md'];
+const OBFUSCATOR = 'javascript-obfuscator@4.1.1';
 
 function copyRecursive(src, dest) {
   fs.mkdirSync(dest, { recursive: true });
@@ -36,24 +39,28 @@ function copyRecursive(src, dest) {
 fs.rmSync(DIST, { recursive: true, force: true });
 fs.mkdirSync(DIST, { recursive: true });
 
+const args = (input, output) => [
+  '-y', '-p', OBFUSCATOR, 'javascript-obfuscator',
+  input,
+  '--output', output,
+  '--compact', 'true',
+  '--control-flow-flattening', 'true',
+  '--control-flow-flattening-threshold', '0.75',
+  '--dead-code-injection', 'true',
+  '--dead-code-injection-threshold', '0.3',
+  '--identifier-names-generator', 'hexadecimal',
+  '--rename-globals', 'false',
+  '--string-array', 'true',
+  '--string-array-rotate', 'true',
+  '--string-array-shuffle', 'true',
+  '--string-array-threshold', '0.75',
+  '--unicode-escape-sequence', 'true',
+];
+
 for (const f of FILES) {
-  const src = fs.readFileSync(path.join(ROOT, f), 'utf8');
-  const out = JavaScriptObfuscator.obfuscate(src, {
-    compact: true,
-    controlFlowFlattening: true,
-    controlFlowFlatteningThreshold: 0.75,
-    deadCodeInjection: true,
-    deadCodeInjectionThreshold: 0.3,
-    identifierNamesGenerator: 'hexadecimal',
-    renameGlobals: false,
-    stringArray: true,
-    stringArrayRotate: true,
-    stringArrayShuffle: true,
-    stringArrayThreshold: 0.75,
-    unicodeEscapeSequence: true,
-  }).getObfuscatedCode();
-  fs.writeFileSync(path.join(DIST, f), out);
-  console.log('obfuscated:', f, `(${(out.length / 1024).toFixed(0)} KB)`);
+  execFileSync('npx', args(path.join(ROOT, f), path.join(DIST, f)), { stdio: 'pipe' });
+  const kb = (fs.statSync(path.join(DIST, f)).size / 1024).toFixed(0);
+  console.log('obfuscated:', f, `(${kb} KB)`);
 }
 for (const d of COPY_DIRS) {
   const src = path.join(ROOT, d);

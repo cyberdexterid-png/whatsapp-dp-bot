@@ -22,8 +22,5 @@
     "bot": "node index.js",
     "build": "node tools/obfuscate.js"
   },
-  "version": "1.0.0",
-  "devDependencies": {
-    "javascript-obfuscator": "^5.8.1"
-  }
+  "version": "1.0.0"
 }
