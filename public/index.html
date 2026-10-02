@@ -64,7 +64,7 @@
     <div style="text-align:left;font-size:13.5px;color:var(--muted);line-height:1.9;margin-bottom:10px">
       <label style="display:block;cursor:pointer">
         <input type="radio" name="dpmode" value="original" checked onchange="onModeChange()">
-        <b style="color:var(--text)">Original</b> — upload your photo untouched, full size.
+        <b style="color:var(--text)">Original</b> — full size, no crop, no resize.
       </label>
       <label style="display:block;cursor:pointer">
         <input type="radio" name="dpmode" value="full" onchange="onModeChange()">
@@ -77,7 +77,6 @@
     </div>
     <div id="previewWrap" style="display:none;position:relative;margin:0 auto 12px;width:fit-content;max-width:100%">
       <img id="preview" alt="DP preview" style="display:block;max-width:280px;border:3px solid var(--green)">
-      <div id="cropGuide" style="display:none;position:absolute;border:2px dashed var(--green);box-sizing:border-box;pointer-events:none"></div>
     </div>
     <button id="setBtn" onclick="setDp()" disabled>Set as my WhatsApp DP</button>
     <div class="msg" id="dpMsg"></div>
@@ -153,18 +152,6 @@ function onModeChange() {
   if (lastFile) pick(lastFile, true);
 }
 
-function showCropGuide() {
-  const img = $('preview'), guide = $('cropGuide');
-  const w = img.clientWidth, h = img.clientHeight;
-  if (!w || !h) { guide.style.display = 'none'; return; }
-  const side = Math.min(w, h);
-  guide.style.display = 'block';
-  guide.style.width = side + 'px';
-  guide.style.height = side + 'px';
-  guide.style.left = ((w - side) / 2) + 'px';
-  guide.style.top = ((h - side) / 2) + 'px';
-}
-
 async function pick(f, keepMsg) {
   if (!f || !f.type.startsWith('image/')) return;
   lastFile = f;
@@ -181,10 +168,8 @@ async function pick(f, keepMsg) {
       if (mode === 'original') {
         img.style.width = 'auto'; img.style.height = 'auto';
         img.style.borderRadius = '12px';
-        showCropGuide();
-        msg.textContent = 'Your original photo. WhatsApp will crop it to a square itself — the dashed box shows roughly what stays.';
+        msg.textContent = 'This exact photo uploads at full size — no crop, no resize.';
       } else {
-        $('cropGuide').style.display = 'none';
         img.style.width = '200px'; img.style.height = '200px';
         img.style.borderRadius = '50%'; img.style.objectFit = 'cover';
         msg.textContent = 'This exact circle is what your DP will look like.';

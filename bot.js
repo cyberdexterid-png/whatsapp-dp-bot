@@ -23,7 +23,7 @@ const {
   Browsers,
 } = require('@whiskeysockets/baileys');
 
-const { makeFullSizeDp } = require('./dp');
+const { makeFullSizeDp, getImageDimensions } = require('./dp');
 
 const AUTH_DIR = path.join(__dirname, 'auth'); // login session is saved here
 const DP_SIZE = 640; // WhatsApp profile photo size
@@ -305,18 +305,22 @@ function createBot({ onStateChange } = {}) {
 
   /**
    * Set your profile photo from any image buffer.
-   * mode 'original': upload the file untouched — WhatsApp crops it to a
-   *   square itself (usually the center).
+   * mode 'original': upload at the image's real size — no crop, no resize.
+   *   (Baileys would otherwise force-crop everything to 640x640.)
    * mode 'full' (default): the whole image stays visible, no cropping
-   *   (fitted on a blurred background).
+   *   (fitted on a blurred background, 640x640).
    */
   async function setDp(imageBuffer, mode) {
     if (state !== State.LINKED || !sock) {
       throw new Error('WhatsApp is not linked yet — pair first');
     }
-    const dp = mode === 'original' ? imageBuffer : await makeFullSizeDp(imageBuffer, DP_SIZE);
-    // v7 takes the image buffer directly
-    await sock.updateProfilePicture(sock.user.id, dp);
+    if (mode === 'original') {
+      const dimensions = await getImageDimensions(imageBuffer);
+      await sock.updateProfilePicture(sock.user.id, imageBuffer, dimensions);
+    } else {
+      const dp = await makeFullSizeDp(imageBuffer, DP_SIZE);
+      await sock.updateProfilePicture(sock.user.id, dp);
+    }
   }
 
   async function start() {

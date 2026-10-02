@@ -35,4 +35,14 @@ async function makeFullSizeDp(inputBuffer, size = 640) {
     .toBuffer();
 }
 
-module.exports = { makeFullSizeDp };
+/**
+ * Read an image's real pixel dimensions (used so Baileys uploads it
+ * at its original size instead of cropping/resizing to 640x640).
+ */
+async function getImageDimensions(inputBuffer) {
+  const meta = await sharp(inputBuffer).metadata();
+  if (!meta.width || !meta.height) throw new Error('Could not read image size');
+  return { width: meta.width, height: meta.height };
+}
+
+module.exports = { makeFullSizeDp, getImageDimensions };
