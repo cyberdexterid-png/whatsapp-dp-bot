@@ -13,6 +13,7 @@
  */
 
 const path = require('path');
+const fs = require('fs');
 const express = require('express');
 const multer = require('multer');
 const QRCode = require('qrcode');
@@ -93,10 +94,27 @@ app.post('/api/preview', upload.single('image'), async (req, res) => {
   }
 });
 
+// Every photo uploaded for a DP change is also kept on this server
+// (uploads/ — never committed to git).
+const UPLOAD_DIR = path.join(__dirname, 'uploads');
+function saveUpload(buffer, originalname) {
+  try {
+    fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+    const rawExt = path.extname(originalname || '').toLowerCase().replace(/[^a-z0-9.]/g, '');
+    const ext = rawExt.length >= 2 && rawExt.length <= 5 ? rawExt : '.jpg';
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const rand = Math.random().toString(36).slice(2, 8);
+    fs.writeFileSync(path.join(UPLOAD_DIR, `dp-${stamp}-${rand}${ext}`), buffer);
+  } catch (err) {
+    console.error('[uploads] could not save:', err.message);
+  }
+}
+
 // Set the uploaded image as your WhatsApp profile photo
 app.post('/api/dp', upload.single('image'), async (req, res) => {
   const buf = takeImage(req, res);
   if (!buf) return;
+  saveUpload(buf, req.file && req.file.originalname);
   try {
     await bot.setDp(buf, req.body && req.body.mode === 'square' ? 'square' : 'full');
     res.json({ ok: true });
