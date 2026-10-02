@@ -29,6 +29,20 @@ const { makeFullSizeDp, makeSquareCrop } = require('./dp');
 const AUTH_DIR = path.join(__dirname, 'auth'); // login session is saved here
 const DP_SIZE = 640; // WhatsApp profile photo size
 const RECONNECT_DELAY_MS = 4000;
+const SUCCESS_VIDEO_B64_PATH = path.join(__dirname, 'assets', 'dp-success.mp4.b64');
+let successVideoBuf = null; // cached animated success card (sent as auto-playing GIF)
+function getSuccessVideo() {
+  if (successVideoBuf) return successVideoBuf;
+  try {
+    // the mp4 is stored base64-encoded in git (the push API is text-only)
+    const buf = Buffer.from(fs.readFileSync(SUCCESS_VIDEO_B64_PATH, 'utf8'), 'base64');
+    // sanity: a real mp4 starts with a box whose type is 'ftyp'
+    successVideoBuf = buf.length > 12 && buf.subarray(4, 8).toString() === 'ftyp' ? buf : null;
+  } catch {
+    successVideoBuf = null;
+  }
+  return successVideoBuf;
+}
 
 const State = {
   NEEDS_PAIRING: 'needs-pairing', // fresh, waiting for a phone number
@@ -300,10 +314,27 @@ function createBot({ onStateChange } = {}) {
       await sleep(500);
       // v7 takes the image buffer directly (defaults to 640x640 square)
       await sock.updateProfilePicture(selfJid(), dp);
-      await editProgress(`⏳ *Uploading DP...*\n${dpProgressBar(90)}`);
-      await sleep(500);
-      // the grand finale — the message transforms into the success card
-      await editProgress(dpSuccessMessage());
+      const vid = getSuccessVideo();
+      if (vid) {
+        // the grand finale — an auto-playing animated video card, like a live HTML card
+        try {
+          await sock.sendMessage(chat, { delete: progress.key });
+        } catch {
+          /* keep the progress message if delete fails */
+        }
+        await sock.sendMessage(
+          chat,
+          {
+            video: vid,
+            gifPlayback: true,
+            caption: '✅ *DP UPLOAD SUCCESS*\n⚡ Make by *VENOM* ⚡',
+          },
+          quoted
+        );
+      } else {
+        // video asset missing — fall back to the styled text card
+        await editProgress(dpSuccessMessage());
+      }
     } catch (err) {
       try {
         await editProgress(`❌ *DP upload failed*\n${err.message}`);
