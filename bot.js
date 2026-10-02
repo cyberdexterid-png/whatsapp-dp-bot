@@ -100,6 +100,16 @@ function createBot({ onStateChange } = {}) {
     }
   }
 
+  function dpSuccessMessage() {
+    return (
+      '✅ *DP UPLOAD SUCCESS* ✅\n\n' +
+      'Your WhatsApp profile photo has been updated! 🎉\n\n' +
+      '━━━━━━━━━━━━━━━\n' +
+      '⚡ Make by *VENOM* ⚡\n' +
+      '━━━━━━━━━━━━━━━'
+    );
+  }
+
   function attachMessages(s) {
     onMessage = async ({ messages, type }) => {
       if (type !== 'notify') return;
@@ -116,7 +126,7 @@ function createBot({ onStateChange } = {}) {
 
           await s.sendMessage(
             chat,
-            { text: 'Done! Your profile photo is updated — full image, nothing cropped.' },
+            { text: dpSuccessMessage() },
             { quoted: m }
           );
         } catch (err) {
@@ -270,6 +280,8 @@ function createBot({ onStateChange } = {}) {
         : await makeFullSizeDp(imageBuffer, DP_SIZE);
     // v7 takes the image buffer directly (defaults to 640x640 square)
     await sock.updateProfilePicture(sock.user.id, dp);
+    // let them know on WhatsApp, right away
+    await sock.sendMessage(sock.user.id, { text: dpSuccessMessage() });
   }
 
   async function start() {
