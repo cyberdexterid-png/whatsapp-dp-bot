@@ -40,10 +40,25 @@ node index.js --set <f>  # set DP once from an image file
 ```
 First-time linking is done via the website; the login is saved in `auth/`.
 
+## Cloud backup of uploaded photos (optional, free)
+
+Every photo you set as DP is saved in the local `uploads/` folder. To also keep
+a copy in the cloud, use **Cloudinary** (free tier ≈ 25 GB):
+
+1. Sign up free at https://cloudinary.com
+2. From your dashboard get **Cloud name**, **API Key**, **API Secret**.
+3. Before `npm start`, set (never commit this):
+   ```bash
+   export CLOUDINARY_URL='cloudinary://<api_key>:<api_secret>@<cloud_name>'
+   ```
+4. `npm start` — uploads now also go to Cloudinary (`whatsapp-dp-bot` folder)
+   in the background. Without the variable, photos are only saved locally.
+
 ## Notes
 
-- Your photo is processed **on the machine running the site** — nothing is
-  uploaded to any server except WhatsApp itself.
+- Your photo is processed **on the machine running the site**, saved in the
+  local `uploads/` folder (and to Cloudinary if you set it up) — and sent to
+  WhatsApp when you set it as your DP.
 - The login session is saved in the `auth/` folder. To unlink, delete that folder
   (or remove the device in WhatsApp → Linked devices) and pair again.
 - ⚠️ This uses an unofficial WhatsApp library. WhatsApp sometimes logs out such

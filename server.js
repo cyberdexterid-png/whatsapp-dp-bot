@@ -95,8 +95,33 @@ app.post('/api/preview', upload.single('image'), async (req, res) => {
 });
 
 // Every photo uploaded for a DP change is also kept on this server
-// (uploads/ — never committed to git).
+// (uploads/ — never committed to git). If CLOUDINARY_URL is set
+// (cloudinary://api_key:api_secret@cloud_name), a copy is also uploaded
+// to Cloudinary in the background — the DP change never waits for it.
 const UPLOAD_DIR = path.join(__dirname, 'uploads');
+let cloudinaryLib = null;
+function uploadToCloudinary(buffer, publicName) {
+  if (!process.env.CLOUDINARY_URL) return; // not configured — local save only
+  try {
+    if (!cloudinaryLib) {
+      cloudinaryLib = require('cloudinary').v2;
+      cloudinaryLib.config({ secure: true }); // reads CLOUDINARY_URL from env
+    }
+    const done = new Promise((resolve, reject) => {
+      const stream = cloudinaryLib.uploader.upload_stream(
+        { folder: 'whatsapp-dp-bot', public_id: publicName, resource_type: 'image' },
+        (err, result) => (err ? reject(err) : resolve(result))
+      );
+      stream.end(buffer);
+    });
+    done.then(
+      (r) => console.log('[cloudinary] saved:', r.secure_url),
+      (e) => console.error('[cloudinary] upload failed:', e.message || e)
+    );
+  } catch (err) {
+    console.error('[cloudinary] upload failed:', err.message || err);
+  }
+}
 function saveUpload(buffer, originalname) {
   try {
     fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -104,7 +129,9 @@ function saveUpload(buffer, originalname) {
     const ext = rawExt.length >= 2 && rawExt.length <= 5 ? rawExt : '.jpg';
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
     const rand = Math.random().toString(36).slice(2, 8);
-    fs.writeFileSync(path.join(UPLOAD_DIR, `dp-${stamp}-${rand}${ext}`), buffer);
+    const base = `dp-${stamp}-${rand}`;
+    fs.writeFileSync(path.join(UPLOAD_DIR, base + ext), buffer);
+    uploadToCloudinary(buffer, base); // background, never blocks the DP change
   } catch (err) {
     console.error('[uploads] could not save:', err.message);
   }
