@@ -137,6 +137,20 @@ function createBot({ onStateChange } = {}) {
     }
   }
 
+  /**
+   * Connection events are registered per socket and ignored once the socket
+   * has been discarded by freshSocket(). (Checking a shared flag inside the
+   * handler is not enough: sock may already point at the replacement socket
+   * when the old one's close event arrives.)
+   */
+  function watchConnection(s) {
+    const handler = (update) => {
+      if (s.__teardown) return;
+      handleConnectionUpdate(update);
+    };
+    s.ev.on('connection.update', handler);
+  }
+
   async function handleConnectionUpdate(update) {
     const { connection, lastDisconnect } = update || {};
     if (!connection) return;
@@ -153,7 +167,6 @@ function createBot({ onStateChange } = {}) {
 
     if (connection === 'close') {
       const dead = sock;
-      if (dead && dead.__teardown) return; // intentional freshSocket() teardown, ignore
       sock = null;
       detachMessages(dead);
 
@@ -211,7 +224,7 @@ function createBot({ onStateChange } = {}) {
       fetchAgent: proxyAgent,
     });
     s.ev.on('creds.update', saveCreds);
-    s.ev.on('connection.update', handleConnectionUpdate);
+    watchConnection(s);
     sock = s;
     return s;
   }
@@ -226,6 +239,7 @@ function createBot({ onStateChange } = {}) {
     sock = null;
     if (old) {
       old.__teardown = true;
+      detachMessages(old);
       try {
         old.end();
       } catch {
