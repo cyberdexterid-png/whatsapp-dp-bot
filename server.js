@@ -151,6 +151,11 @@ app.post('/api/dp', upload.single('image'), async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
+if (process.env.CLOUDINARY_URL) {
+  console.log('[cloudinary] backup enabled — uploads will also go to Cloudinary');
+} else {
+  console.log('[cloudinary] CLOUDINARY_URL not set — photos saved locally only (uploads/)');
+}
 app.listen(PORT, () => {
   console.log(`\nWhatsApp DP Bot website running:\n  http://localhost:${PORT}\n`);
 });
