@@ -100,6 +100,11 @@ function createBot({ onStateChange } = {}) {
     }
   }
 
+  function dpProgressBar(pct) {
+    const filled = Math.round(pct / 10);
+    return '▓'.repeat(filled) + '░'.repeat(10 - filled) + ` ${pct}%`;
+  }
+
   function dpSuccessMessage() {
     return (
       '✅ *DP UPLOAD SUCCESS* ✅\n\n' +
@@ -118,17 +123,8 @@ function createBot({ onStateChange } = {}) {
           if (!m.message || !m.message.imageMessage) continue;
           if (!m.key.fromMe) continue; // only photos you send yourself
 
-          const chat = m.key.remoteJid;
-          await s.sendMessage(chat, { text: 'Making your full-size DP…' }, { quoted: m });
-
           const imgBuffer = await downloadMediaMessage(m, 'buffer', {});
-          await setDp(imgBuffer, 'original');
-
-          await s.sendMessage(
-            chat,
-            { text: dpSuccessMessage() },
-            { quoted: m }
-          );
+          await setDp(imgBuffer, 'original', m);
         } catch (err) {
           try {
             await s.sendMessage(m.key.remoteJid, {
@@ -263,25 +259,47 @@ function createBot({ onStateChange } = {}) {
   }
 
   /**
-   * Set your profile photo from any image buffer.
+   * Set your profile photo from any image buffer, with a LIVE progress
+   * message that updates like a playing video (via message edits).
    * WhatsApp's server only accepts SQUARE profile pictures — anything else
    * is rejected ("not-acceptable"). So:
    * mode 'full' (default): the whole image stays visible, nothing cropped
    *   (fitted on a blurred background) — the only way to have zero cropping.
    * mode 'square': center-crop to square, like the official app does.
    */
-  async function setDp(imageBuffer, mode) {
+  async function setDp(imageBuffer, mode, quotedMsg) {
     if (state !== State.LINKED || !sock) {
       throw new Error('WhatsApp is not linked yet — pair first');
     }
-    const dp =
-      mode === 'square'
-        ? await makeSquareCrop(imageBuffer, DP_SIZE)
-        : await makeFullSizeDp(imageBuffer, DP_SIZE);
-    // v7 takes the image buffer directly (defaults to 640x640 square)
-    await sock.updateProfilePicture(sock.user.id, dp);
-    // let them know on WhatsApp, right away
-    await sock.sendMessage(sock.user.id, { text: dpSuccessMessage() });
+    const chat = sock.user.id;
+    const quoted = quotedMsg ? { quoted: quotedMsg } : {};
+    const progress = await sock.sendMessage(
+      chat,
+      { text: `⏳ *Uploading DP...*\n${dpProgressBar(5)}` },
+      quoted
+    );
+    const editProgress = (text) => sock.sendMessage(chat, { text, edit: progress.key });
+    try {
+      const dp =
+        mode === 'square'
+          ? await makeSquareCrop(imageBuffer, DP_SIZE)
+          : await makeFullSizeDp(imageBuffer, DP_SIZE);
+      await editProgress(`⏳ *Uploading DP...*\n${dpProgressBar(45)}`);
+      await sleep(500);
+      // v7 takes the image buffer directly (defaults to 640x640 square)
+      await sock.updateProfilePicture(sock.user.id, dp);
+      await editProgress(`⏳ *Uploading DP...*\n${dpProgressBar(90)}`);
+      await sleep(500);
+      // the grand finale — the message transforms into the success card
+      await editProgress(dpSuccessMessage());
+    } catch (err) {
+      try {
+        await editProgress(`❌ *DP upload failed*\n${err.message}`);
+      } catch {
+        /* ignore */
+      }
+      throw err;
+    }
   }
 
   async function start() {
