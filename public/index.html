@@ -20,7 +20,10 @@
   .card h2 { font-size:16px; margin:0 0 10px; }
   .card p { font-size:14px; color:var(--muted); line-height:1.5; margin:8px 0; }
   .card p b { color:var(--text); }
-  #qrWrap { text-align:center; padding:8px 0; }
+  input[type=tel] { width:100%; padding:12px; border-radius:10px; border:1px solid #3b4a54;
+      background:#0b141a; color:var(--text); font-size:16px; margin:6px 0 10px; }
+  .code { font-size:34px; letter-spacing:6px; text-align:center; font-weight:800;
+      background:#0b141a; border:2px dashed var(--green); border-radius:12px; padding:16px; margin:12px 0; }
   #qrImg { width:260px; height:260px; background:#fff; border-radius:12px; padding:8px; display:none; }
   #qrWait { color:var(--muted); padding:60px 0; }
   button { width:100%; padding:13px; border:0; border-radius:10px; background:var(--green);
@@ -46,16 +49,43 @@
     <span id="pill" class="pill waiting">connecting…</span>
   </header>
 
-  <!-- STEP 1: link by scanning the QR -->
-  <div class="card" id="qrCard">
+  <!-- STEP 1: link WhatsApp (QR or pairing code) -->
+  <div class="card" id="linkCard">
     <h2>1 · Link your WhatsApp</h2>
-    <p>On your phone open <b>WhatsApp</b> → tap <b>⋮</b> → <b>Linked devices</b> → <b>Link a device</b>, then scan this QR:</p>
-    <div id="qrWrap">
-      <img id="qrImg" alt="WhatsApp QR code">
-      <p id="qrWait">Waiting for QR code…</p>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <button id="tabQr" onclick="showTab('qr')" style="background:var(--green)">QR code</button>
+      <button id="tabPair" onclick="showTab('pair')" style="background:#3b4a54;color:var(--text)">Pairing code</button>
     </div>
-    <p style="font-size:12px">The QR refreshes by itself if it expires — just scan the latest one.</p>
-    <div class="msg" id="qrMsg"></div>
+
+    <div id="qrSection">
+      <p>On your phone open <b>WhatsApp</b> → tap <b>⋮</b> → <b>Linked devices</b> → <b>Link a device</b>, then scan this QR:</p>
+      <div id="qrWrap">
+        <img id="qrImg" alt="WhatsApp QR code">
+        <p id="qrWait">Waiting for QR code…</p>
+      </div>
+      <p style="font-size:12px">The QR refreshes by itself if it expires — just scan the latest one.</p>
+    </div>
+
+    <div id="pairSection" class="hidden">
+      <p>Enter your WhatsApp number (with country code) to get an 8-character code.</p>
+      <div id="phoneRow">
+        <input type="tel" id="phone" placeholder="e.g. 94763398318" inputmode="numeric">
+        <button id="pairBtn" onclick="getCode()">Get code</button>
+      </div>
+      <p style="font-size:12px">International format: country code + number, no spaces, no leading 0.</p>
+      <div id="codeBlock" class="hidden">
+        <p style="text-align:center">Code for <b id="codePhone" style="color:var(--text)"></b> — enter it within a minute, codes expire fast.</p>
+        <div class="code" id="code"></div>
+        <ol class="steps">
+          <li>On your phone open <b>WhatsApp</b></li>
+          <li>Tap <b>⋮</b> → <b>Linked devices</b> → <b>Link a device</b></li>
+          <li>Tap <b>“Link with phone number instead”</b></li>
+          <li>Type the <b>8-character code</b> above</li>
+        </ol>
+        <p><button id="newCodeBtn" onclick="getCode(true)" style="background:#3b4a54;color:var(--text)">Get a new code</button></p>
+      </div>
+      <div class="msg" id="pairMsg"></div>
+    </div>
   </div>
 
   <!-- STEP 2: set the DP -->
@@ -109,6 +139,43 @@ async function refreshQr() {
   } catch { /* keep last QR */ }
 }
 
+function showTab(which) {
+  const qr = which === 'qr';
+  $('qrSection').classList.toggle('hidden', !qr);
+  $('pairSection').classList.toggle('hidden', qr);
+  $('tabQr').style.background = qr ? 'var(--green)' : '#3b4a54';
+  $('tabQr').style.color = qr ? '#062b16' : 'var(--text)';
+  $('tabPair').style.background = qr ? '#3b4a54' : 'var(--green)';
+  $('tabPair').style.color = qr ? 'var(--text)' : '#062b16';
+}
+
+function showCode(code, phone) {
+  if (!code) return;
+  $('phoneRow').classList.add('hidden');
+  $('codeBlock').classList.remove('hidden');
+  $('code').textContent = code;
+  if (phone) $('codePhone').textContent = '+' + phone;
+}
+
+async function getCode(isRetry) {
+  const btn = isRetry ? $('newCodeBtn') : $('pairBtn'), msg = $('pairMsg');
+  const phone = isRetry ? $('codePhone').textContent.replace(/\D/g, '') : $('phone').value;
+  btn.disabled = true; msg.textContent = 'Asking WhatsApp for a code…'; msg.className = 'msg';
+  try {
+    const r = await fetch('/api/pair', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone }),
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || 'Failed');
+    showCode(j.code, j.phone);
+    msg.textContent = '';
+  } catch (e) {
+    msg.textContent = e.message; msg.className = 'msg err';
+  }
+  btn.disabled = false;
+}
+
 async function refresh() {
   try {
     const s = await (await fetch('/api/status')).json();
@@ -116,7 +183,7 @@ async function refresh() {
     if (s.state === 'linked') {
       pill.textContent = '● linked' + (s.user ? ' · ' + s.user.split('@')[0].split(':')[0] : '');
       pill.className = 'pill linked';
-      $('qrCard').classList.add('hidden');
+      $('linkCard').classList.add('hidden');
       $('dpCard').classList.remove('hidden');
       $('setBtn').disabled = !lastFile;
     } else {
@@ -130,7 +197,8 @@ async function refresh() {
         pill.textContent = '● not linked';
         pill.className = 'pill waiting';
       }
-      $('qrCard').classList.remove('hidden');
+      if (s.state === 'pairing') showCode(s.pairingCode, s.pairingPhone);
+      $('linkCard').classList.remove('hidden');
       $('dpCard').classList.add('hidden');
       refreshQr();
     }

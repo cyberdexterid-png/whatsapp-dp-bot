@@ -144,20 +144,6 @@ function createBot({ onStateChange } = {}) {
     }
   }
 
-  /**
-   * Connection events are registered per socket and ignored once the socket
-   * has been discarded by freshSocket(). (Checking a shared flag inside the
-   * handler is not enough: sock may already point at the replacement socket
-   * when the old one's close event arrives.)
-   */
-  function watchConnection(s) {
-    const handler = (update) => {
-      if (s.__teardown) return;
-      handleConnectionUpdate(update);
-    };
-    s.ev.on('connection.update', handler);
-  }
-
   async function handleConnectionUpdate(update) {
     const { connection, lastDisconnect, qr } = update || {};
     if (!connection && !qr) return;
@@ -240,30 +226,9 @@ function createBot({ onStateChange } = {}) {
       fetchAgent: proxyAgent,
     });
     s.ev.on('creds.update', saveCreds);
-    watchConnection(s);
+    s.ev.on('connection.update', handleConnectionUpdate);
     sock = s;
     return s;
-  }
-
-  /**
-   * Throw away the current socket + credentials and start pristine.
-   * Used before issuing a pairing code: a stale session is the most common
-   * reason a code is rejected by the phone.
-   */
-  async function freshSocket() {
-    const old = sock;
-    sock = null;
-    if (old) {
-      old.__teardown = true;
-      detachMessages(old);
-      try {
-        old.end();
-      } catch {
-        /* ignore */
-      }
-    }
-    wipeAuthDir();
-    return ensureSocket();
   }
 
   /** Ask WhatsApp for an 8-character pairing code for this phone number. */
@@ -272,29 +237,13 @@ function createBot({ onStateChange } = {}) {
     if (!/^\d{7,15}$/.test(digits)) {
       throw new Error('Enter your phone number with country code, e.g. 94763398318');
     }
-    {
-      const cur = await ensureSocket();
-      if (cur.authState.creds.registered) {
-        throw new Error('This device is already linked to WhatsApp');
-      }
+    const s = await ensureSocket();
+    if (s.authState.creds.registered) {
+      throw new Error('This device is already linked to WhatsApp');
     }
-    // always issue the code on pristine credentials
-    const s = await freshSocket();
     console.log('[pair] requesting pairing code for +' + digits);
     // the pairing IQ fails if the websocket handshake isn't done yet — wait for it
     await withTimeout(s.waitForSocketOpen(), 20000, 'Could not reach WhatsApp. Check your internet and try again.');
-    // a code for a number that isn't on WhatsApp can never be accepted — catch typos first
-    try {
-      const [lookup] = await s.onWhatsApp(digits);
-      if (!lookup || !lookup.exists) {
-        throw new Error(
-          'That number is not on WhatsApp. Use international format: country code + number, no spaces, no leading 0 — e.g. 94763398318'
-        );
-      }
-    } catch (err) {
-      if (/not on WhatsApp/.test(err.message)) throw err;
-      console.warn('[pair] number lookup failed, continuing anyway:', err.message);
-    }
     const code = await s.requestPairingCode(digits);
     pairingCode = code;
     pairingPhone = digits;
