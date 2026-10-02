@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ic_launcher_background">#04070d</color>
+    <style name="Theme.VenomDpBot" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:statusBarColor">#04070d</item>
+        <item name="android:navigationBarColor">#04070d</item>
+        <item name="android:windowBackground">#04070d</item>
+    </style>
+</resources>
