@@ -20,6 +20,7 @@ const {
   useMultiFileAuthState,
   DisconnectReason,
   downloadMediaMessage,
+  Browsers,
 } = require('@whiskeysockets/baileys');
 
 const { makeFullSizeDp } = require('./dp');
@@ -219,7 +220,7 @@ function createBot({ onStateChange } = {}) {
     const s = makeWASocket({
       auth: authState,
       logger: pino({ level: 'silent' }),
-      browser: ['DP Bot', 'Chrome', '120.0'],
+      browser: Browsers.macOS('Safari'),
       agent: proxyAgent,
       fetchAgent: proxyAgent,
     });
