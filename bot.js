@@ -112,7 +112,7 @@ function createBot({ onStateChange } = {}) {
           await s.sendMessage(chat, { text: 'Making your full-size DP…' }, { quoted: m });
 
           const imgBuffer = await downloadMediaMessage(m, 'buffer', {});
-          await setDp(imgBuffer);
+          await setDp(imgBuffer, 'original');
 
           await s.sendMessage(
             chat,
