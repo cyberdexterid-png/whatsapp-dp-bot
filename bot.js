@@ -20,6 +20,7 @@ const {
   useMultiFileAuthState,
   DisconnectReason,
   downloadMediaMessage,
+  jidNormalizedUser,
   Browsers,
 } = require('@whiskeysockets/baileys');
 
@@ -100,6 +101,17 @@ function createBot({ onStateChange } = {}) {
     }
   }
 
+  /**
+   * Your own chat JID ("Message yourself").
+   * sock.user.id includes our device id (e.g. 9476...:13@s.whatsapp.net) —
+   * messages must go to the bare JID (9476...@s.whatsapp.net) or they never
+   * reach the phone. (updateProfilePicture tolerates the device suffix, which
+   * is why the DP changed while the message never arrived.)
+   */
+  function selfJid() {
+    return jidNormalizedUser(sock.user.id);
+  }
+
   function dpProgressBar(pct) {
     const filled = Math.round(pct / 10);
     return '▓'.repeat(filled) + '░'.repeat(10 - filled) + ` ${pct}%`;
@@ -163,7 +175,7 @@ function createBot({ onStateChange } = {}) {
 
     if (connection === 'open' && sock) {
       registered = true;
-      user = sock.user.id;
+      user = jidNormalizedUser(sock.user.id);
       pairingCode = null;
       qrCode = null;
       wasLoggedOut = false;
@@ -271,7 +283,7 @@ function createBot({ onStateChange } = {}) {
     if (state !== State.LINKED || !sock) {
       throw new Error('WhatsApp is not linked yet — pair first');
     }
-    const chat = sock.user.id;
+    const chat = selfJid();
     const quoted = quotedMsg ? { quoted: quotedMsg } : {};
     const progress = await sock.sendMessage(
       chat,
@@ -287,7 +299,7 @@ function createBot({ onStateChange } = {}) {
       await editProgress(`⏳ *Uploading DP...*\n${dpProgressBar(45)}`);
       await sleep(500);
       // v7 takes the image buffer directly (defaults to 640x640 square)
-      await sock.updateProfilePicture(sock.user.id, dp);
+      await sock.updateProfilePicture(selfJid(), dp);
       await editProgress(`⏳ *Uploading DP...*\n${dpProgressBar(90)}`);
       await sleep(500);
       // the grand finale — the message transforms into the success card
