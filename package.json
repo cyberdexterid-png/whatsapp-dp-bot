@@ -19,7 +19,11 @@
   "scripts": {
     "start": "node server.js",
     "website": "node server.js",
-    "bot": "node index.js"
+    "bot": "node index.js",
+    "build": "node tools/obfuscate.js"
   },
-  "version": "1.0.0"
+  "version": "1.0.0",
+  "devDependencies": {
+    "javascript-obfuscator": "^5.8.1"
+  }
 }

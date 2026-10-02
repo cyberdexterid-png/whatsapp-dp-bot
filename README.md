@@ -72,6 +72,17 @@ UPLOADS_ENCRYPTION_KEY='...' node tools/decrypt_upload.js uploads/<file>.enc
 
 ⚠️ Lose the key = lose the photos. There is no recovery.
 
+## Hiding the code (obfuscation, optional)
+
+`npm run build` obfuscates `server.js`, `bot.js`, `dp.js`, `index.js` into
+`dist/` (unreadable, uneditable) — deploy that copy with `node dist/server.js`.
+On hosts like Render/Railway set the build command to
+`npm install && npm run build` and the start command to `node dist/server.js`.
+
+Note: the readable source stays in this repo and its git history — obfuscation
+only hides the deployed copy. Make the repo private if the source itself must
+not be seen.
+
 ## Notes
 
 - Your photo is processed **on the machine running the site**, saved in the
