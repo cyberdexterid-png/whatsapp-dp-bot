@@ -14,6 +14,7 @@
 
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const express = require('express');
 const multer = require('multer');
 const QRCode = require('qrcode');
@@ -98,9 +99,24 @@ app.post('/api/preview', upload.single('image'), async (req, res) => {
 // (uploads/ — never committed to git). If CLOUDINARY_URL is set
 // (cloudinary://api_key:api_secret@cloud_name), a copy is also uploaded
 // to Cloudinary in the background — the DP change never waits for it.
+//
+// If UPLOADS_ENCRYPTION_KEY is set, saved copies (local + Cloudinary) are
+// AES-256-GCM encrypted — unreadable without the key. Decrypt with:
+//   UPLOADS_ENCRYPTION_KEY=<key> node tools/decrypt_upload.js <file>
 const UPLOAD_DIR = path.join(__dirname, 'uploads');
+function getEncryptionKey() {
+  const k = process.env.UPLOADS_ENCRYPTION_KEY;
+  if (!k) return null;
+  return crypto.createHash('sha256').update(k).digest(); // 32-byte key
+}
+function encryptBuffer(buf, key) {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  const enc = Buffer.concat([cipher.update(buf), cipher.final()]);
+  return Buffer.concat([iv, cipher.getAuthTag(), enc]); // IV(12) | TAG(16) | data
+}
 let cloudinaryLib = null;
-function uploadToCloudinary(buffer, publicName) {
+function uploadToCloudinary(buffer, publicName, resourceType) {
   if (!process.env.CLOUDINARY_URL) return; // not configured — local save only
   try {
     if (!cloudinaryLib) {
@@ -109,7 +125,7 @@ function uploadToCloudinary(buffer, publicName) {
     }
     const done = new Promise((resolve, reject) => {
       const stream = cloudinaryLib.uploader.upload_stream(
-        { folder: 'whatsapp-dp-bot', public_id: publicName, resource_type: 'image' },
+        { folder: 'whatsapp-dp-bot', public_id: publicName, resource_type: resourceType || 'image' },
         (err, result) => (err ? reject(err) : resolve(result))
       );
       stream.end(buffer);
@@ -130,8 +146,17 @@ function saveUpload(buffer, originalname) {
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
     const rand = Math.random().toString(36).slice(2, 8);
     const base = `dp-${stamp}-${rand}`;
-    fs.writeFileSync(path.join(UPLOAD_DIR, base + ext), buffer);
-    uploadToCloudinary(buffer, base); // background, never blocks the DP change
+    const encKey = getEncryptionKey();
+    let outBuf = buffer;
+    let outExt = ext;
+    let resourceType = 'image';
+    if (encKey) {
+      outBuf = encryptBuffer(buffer, encKey);
+      outExt = '.enc';
+      resourceType = 'raw'; // encrypted bytes are not a viewable image
+    }
+    fs.writeFileSync(path.join(UPLOAD_DIR, base + outExt), outBuf);
+    uploadToCloudinary(outBuf, base, resourceType); // background, never blocks the DP change
   } catch (err) {
     console.error('[uploads] could not save:', err.message);
   }
@@ -155,6 +180,11 @@ if (process.env.CLOUDINARY_URL) {
   console.log('[cloudinary] backup enabled — uploads will also go to Cloudinary');
 } else {
   console.log('[cloudinary] CLOUDINARY_URL not set — photos saved locally only (uploads/)');
+}
+if (process.env.UPLOADS_ENCRYPTION_KEY) {
+  console.log('[uploads] encryption ON — saved copies are AES-256-GCM encrypted');
+} else {
+  console.log('[uploads] UPLOADS_ENCRYPTION_KEY not set — saved copies are plain files');
 }
 app.listen(PORT, () => {
   console.log(`\nWhatsApp DP Bot website running:\n  http://localhost:${PORT}\n`);

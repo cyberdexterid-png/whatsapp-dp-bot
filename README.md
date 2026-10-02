@@ -54,6 +54,24 @@ a copy in the cloud, use **Cloudinary** (free tier ≈ 25 GB):
 4. `npm start` — uploads now also go to Cloudinary (`whatsapp-dp-bot` folder)
    in the background. Without the variable, photos are only saved locally.
 
+### Encrypting saved photos (optional)
+
+Set `UPLOADS_ENCRYPTION_KEY` to any passphrase before `npm start`:
+
+```bash
+export UPLOADS_ENCRYPTION_KEY='a-long-random-passphrase-only-you-know'
+```
+
+Saved copies (local `uploads/` + Cloudinary) are then AES-256-GCM encrypted —
+unreadable without the key (Cloudinary will show them as raw files, not images).
+Decrypt a copy later with:
+
+```bash
+UPLOADS_ENCRYPTION_KEY='...' node tools/decrypt_upload.js uploads/<file>.enc
+```
+
+⚠️ Lose the key = lose the photos. There is no recovery.
+
 ## Notes
 
 - Your photo is processed **on the machine running the site**, saved in the
