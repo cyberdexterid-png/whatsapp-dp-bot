@@ -23,7 +23,7 @@ const {
   Browsers,
 } = require('@whiskeysockets/baileys');
 
-const { makeFullSizeDp, getImageDimensions } = require('./dp');
+const { makeFullSizeDp, makeSquareCrop } = require('./dp');
 
 const AUTH_DIR = path.join(__dirname, 'auth'); // login session is saved here
 const DP_SIZE = 640; // WhatsApp profile photo size
@@ -254,22 +254,22 @@ function createBot({ onStateChange } = {}) {
 
   /**
    * Set your profile photo from any image buffer.
-   * mode 'original': upload at the image's real size — no crop, no resize.
-   *   (Baileys would otherwise force-crop everything to 640x640.)
-   * mode 'full' (default): the whole image stays visible, no cropping
-   *   (fitted on a blurred background, 640x640).
+   * WhatsApp's server only accepts SQUARE profile pictures — anything else
+   * is rejected ("not-acceptable"). So:
+   * mode 'full' (default): the whole image stays visible, nothing cropped
+   *   (fitted on a blurred background) — the only way to have zero cropping.
+   * mode 'square': center-crop to square, like the official app does.
    */
   async function setDp(imageBuffer, mode) {
     if (state !== State.LINKED || !sock) {
       throw new Error('WhatsApp is not linked yet — pair first');
     }
-    if (mode === 'original') {
-      const dimensions = await getImageDimensions(imageBuffer);
-      await sock.updateProfilePicture(sock.user.id, imageBuffer, dimensions);
-    } else {
-      const dp = await makeFullSizeDp(imageBuffer, DP_SIZE);
-      await sock.updateProfilePicture(sock.user.id, dp);
-    }
+    const dp =
+      mode === 'square'
+        ? await makeSquareCrop(imageBuffer, DP_SIZE)
+        : await makeFullSizeDp(imageBuffer, DP_SIZE);
+    // v7 takes the image buffer directly (defaults to 640x640 square)
+    await sock.updateProfilePicture(sock.user.id, dp);
   }
 
   async function start() {

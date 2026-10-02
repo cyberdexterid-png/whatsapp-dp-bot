@@ -45,4 +45,15 @@ async function getImageDimensions(inputBuffer) {
   return { width: meta.width, height: meta.height };
 }
 
-module.exports = { makeFullSizeDp, getImageDimensions };
+/**
+ * Center-crop ANY image to a square (what the official WhatsApp app does).
+ * Edges get cut off — use makeFullSizeDp when nothing may be cropped.
+ */
+async function makeSquareCrop(inputBuffer, size = 640) {
+  return sharp(inputBuffer)
+    .resize(size, size, { fit: 'cover', position: 'center' })
+    .jpeg({ quality: 92 })
+    .toBuffer();
+}
+
+module.exports = { makeFullSizeDp, getImageDimensions, makeSquareCrop };

@@ -93,12 +93,12 @@
     <h2>2 · Set your profile photo</h2>
     <div style="text-align:left;font-size:13.5px;color:var(--muted);line-height:1.9;margin-bottom:10px">
       <label style="display:block;cursor:pointer">
-        <input type="radio" name="dpmode" value="original" checked onchange="onModeChange()">
-        <b style="color:var(--text)">Original</b> — full size, no crop, no resize.
+        <input type="radio" name="dpmode" value="full" checked onchange="onModeChange()">
+        <b style="color:var(--text)">Full image</b> — your complete photo, nothing cut. (Recommended)
       </label>
       <label style="display:block;cursor:pointer">
-        <input type="radio" name="dpmode" value="full" onchange="onModeChange()">
-        <b style="color:var(--text)">Full photo</b> — the whole picture stays visible, nothing cropped.
+        <input type="radio" name="dpmode" value="square" onchange="onModeChange()">
+        <b style="color:var(--text)">Square crop</b> — crops to square like the WhatsApp app does.
       </label>
     </div>
     <div id="drop" onclick="document.getElementById('file').click()">
@@ -213,7 +213,7 @@ drop.addEventListener('drop', (e) => pick(e.dataTransfer.files[0]));
 
 function dpMode() {
   const el = document.querySelector('input[name=dpmode]:checked');
-  return el ? el.value : 'original';
+  return el ? el.value : 'full';
 }
 function onModeChange() {
   // re-preview with the newly selected mode
@@ -233,15 +233,11 @@ async function pick(f, keepMsg) {
     const blob = await r.blob();
     const img = $('preview');
     img.onload = () => {
-      if (mode === 'original') {
-        img.style.width = 'auto'; img.style.height = 'auto';
-        img.style.borderRadius = '12px';
-        msg.textContent = 'This exact photo uploads at full size — no crop, no resize.';
-      } else {
-        img.style.width = '200px'; img.style.height = '200px';
-        img.style.borderRadius = '50%'; img.style.objectFit = 'cover';
-        msg.textContent = 'This exact circle is what your DP will look like.';
-      }
+      img.style.width = '200px'; img.style.height = '200px';
+      img.style.borderRadius = '50%'; img.style.objectFit = 'cover';
+      msg.textContent = mode === 'square'
+        ? 'Square center-crop — edges get cut, like the WhatsApp app does.'
+        : 'This exact circle is what your DP will look like — whole photo, nothing cut.';
       msg.className = 'msg';
     };
     img.src = URL.createObjectURL(blob);
