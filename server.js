@@ -6,6 +6,7 @@
  * Pages / API:
  *   GET  /              the website
  *   GET  /api/status    { state, pairingCode, user, wasLoggedOut }
+ *   GET  /api/qr        { ts, image }  (QR data URL for linking, null until WhatsApp sends one)
  *   POST /api/pair      { phone } -> { code }   (8-char WhatsApp pairing code)
  *   POST /api/preview   image file -> processed 640x640 JPEG (exact DP preview)
  *   POST /api/dp        image file -> { ok:true } (sets your WhatsApp DP)
@@ -14,6 +15,7 @@
 const path = require('path');
 const express = require('express');
 const multer = require('multer');
+const QRCode = require('qrcode');
 
 const { createBot } = require('./bot');
 const { makeFullSizeDp } = require('./dp');
@@ -35,6 +37,21 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/api/status', (req, res) => {
   res.json(bot.getStatus());
+});
+
+// QR code for linking (rendered server-side, cached until WhatsApp rotates it)
+let qrCache = { ts: 0, image: null };
+app.get('/api/qr', async (req, res) => {
+  const { qr, ts } = bot.getQr();
+  if (!qr) return res.json({ ts: 0, image: null });
+  if (ts === qrCache.ts && qrCache.image) return res.json({ ts, image: qrCache.image });
+  try {
+    const image = await QRCode.toDataURL(qr, { width: 280, margin: 1 });
+    qrCache = { ts, image };
+    res.json({ ts, image });
+  } catch {
+    res.status(500).json({ error: 'QR render failed' });
+  }
 });
 
 app.post('/api/pair', async (req, res) => {

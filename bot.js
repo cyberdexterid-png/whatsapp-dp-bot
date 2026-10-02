@@ -73,6 +73,8 @@ function createBot({ onStateChange } = {}) {
   let state = State.NEEDS_PAIRING;
   let pairingCode = null;
   let pairingPhone = null; // number the current code was issued for
+  let qrCode = null; // latest QR string from WhatsApp
+  let qrTs = 0; // when the current QR was received
   let user = null;
   let registered = false; // true once this session has ever linked successfully
   let wasLoggedOut = false;
@@ -80,7 +82,11 @@ function createBot({ onStateChange } = {}) {
   let onMessage = null;
 
   function getStatus() {
-    return { state, pairingCode, pairingPhone, user, wasLoggedOut };
+    return { state, pairingCode, pairingPhone, qrTs, user, wasLoggedOut };
+  }
+
+  function getQr() {
+    return { qr: qrCode, ts: qrTs };
   }
 
   function setState(s) {
@@ -153,13 +159,21 @@ function createBot({ onStateChange } = {}) {
   }
 
   async function handleConnectionUpdate(update) {
-    const { connection, lastDisconnect } = update || {};
+    const { connection, lastDisconnect, qr } = update || {};
+    if (!connection && !qr) return;
+
+    // WhatsApp sends a fresh QR for unlinked sessions (it expires, so keep the latest)
+    if (qr) {
+      qrCode = qr;
+      qrTs = Date.now();
+    }
     if (!connection) return;
 
     if (connection === 'open' && sock) {
       registered = true;
       user = sock.user.id;
       pairingCode = null;
+      qrCode = null;
       wasLoggedOut = false;
       attachMessages(sock);
       setState(State.LINKED);
@@ -185,6 +199,7 @@ function createBot({ onStateChange } = {}) {
         const midPairing = state === State.PAIRING ? pairingPhone : null;
         pairingCode = null;
         pairingPhone = null;
+        qrCode = null;
         user = null;
         wasLoggedOut = true;
         setState(State.LOGGED_OUT);
@@ -316,7 +331,7 @@ function createBot({ onStateChange } = {}) {
     }
   }
 
-  return { start, getStatus, requestPair, setDp, State };
+  return { start, getStatus, getQr, requestPair, setDp, State };
 }
 
 module.exports = { createBot, State, DP_SIZE };
